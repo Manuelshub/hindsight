@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.env
+.env.local
+
+# Private working documents — strategy, competitive analysis, and internal planning.
+# Kept locally, deliberately never published. Public-facing docs live in README.md.
+docs/
+
+# market data cache + run artifacts
+data/cache/
+runs/
+adapters/
+*.jsonl
+!training/examples/*.jsonl
+
+# foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+# contracts/lib is a git submodule (forge-std) — tracked, not ignored

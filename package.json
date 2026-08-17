@@ -1,0 +1,38 @@
+{
+  "name": "hindsight",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A trading agent that learns from its own losses. Decision traces on 0G Storage, generational fine-tuning on 0G Compute, provable lineage on 0G Chain.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/**/*.test.ts",
+    "backtest": "tsx src/cli/backtest.ts",
+    "trace": "tsx src/cli/trace.ts",
+    "dataset": "tsx src/cli/dataset.ts",
+    "compare": "tsx src/cli/compare.ts"
+  },
+  "dependencies": {
+    "@0gfoundation/0g-compute-ts-sdk": "^0.9.0",
+    "@0gfoundation/0g-storage-ts-sdk": "^1.2.11",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "blake-hash",
+      "bufferutil",
+      "utf-8-validate",
+      "es5-ext"
+    ]
+  }
+}
