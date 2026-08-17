@@ -7,7 +7,6 @@
  * be labelled unsealed everywhere it appears.
  */
 import type { GenerationStats } from '../types.js';
-import { NotImplementedError } from '../errors.js';
 
 export interface EvaluationResult {
   stats: GenerationStats;
@@ -18,21 +17,61 @@ export interface EvaluationResult {
   parseFailureRate: number;
 }
 
+export class UnsealedEvaluationError extends Error {
+  constructor(sealedAt: number, windowStart: number) {
+    super(
+      `evaluation window starts ${sealedAt - windowStart}s before the seal ` +
+        `(sealedAt=${sealedAt}, windowStart=${windowStart}) — this data was visible at ` +
+        `training time and cannot be reported as out-of-sample`,
+    );
+    this.name = 'UnsealedEvaluationError';
+  }
+}
+
 /**
  * Guards invariant I2 client-side, mirroring the contract's `EvaluationPredatesSeal`.
+ *
  * Throws rather than returning a flag: a caller that forgets to check a boolean would
  * publish an unsealed number as sealed, which is the one failure mode this project cannot
- * afford.
+ * afford. The contract would reject it too, but by then the number is already in a README.
  */
-export function assertSealedWindow(_sealedAt: number, _windowStart: number): void {
-  throw new NotImplementedError('assertSealedWindow');
+export function assertSealedWindow(sealedAt: number, windowStart: number): void {
+  if (windowStart < sealedAt) throw new UnsealedEvaluationError(sealedAt, windowStart);
 }
 
-/** Basis-point conversions for the on-chain record. */
-export function toBps(_fraction: number): number {
-  throw new NotImplementedError('toBps');
+/** Fraction to basis points, rounded for on-chain integer storage. */
+export function toBps(fraction: number): number {
+  return Math.round(fraction * 10_000);
 }
 
-export function formatComparison(_results: EvaluationResult[]): string {
-  throw new NotImplementedError('formatComparison');
+function pct(x: number): string {
+  return `${(x * 100).toFixed(2)}%`;
+}
+
+export function formatComparison(results: EvaluationResult[]): string {
+  if (results.length === 0) return 'no results';
+
+  const header =
+    '  gen  model                 sealed  decisions  accuracy  cumulative   sharpe  parse-fail';
+  const rows = results.map((r) => {
+    const s = r.stats;
+    return [
+      `  ${String(s.generation).padStart(3)}`,
+      s.model.slice(0, 20).padEnd(20),
+      (r.sealed ? 'YES' : 'no').padStart(6),
+      String(s.traces).padStart(10),
+      pct(s.accuracy).padStart(9),
+      pct(s.cumulativeReturn).padStart(11),
+      s.sharpe.toFixed(2).padStart(8),
+      pct(r.parseFailureRate).padStart(11),
+    ].join(' ');
+  });
+
+  const anyUnsealed = results.some((r) => !r.sealed);
+  const footer = anyUnsealed
+    ? '\n  NOTE: rows marked "no" are replay evaluations on historical data.\n' +
+      '  They are for development only and must not be reported as evidence of improvement.'
+    : '';
+
+  return [header, ...rows].join('\n') + footer;
 }
