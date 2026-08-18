@@ -96,6 +96,7 @@ describe('toDecision', () => {
     assert.equal(decision.model, 'gen3-lora');
   });
 
+
   it('produces a confidence within [0,1]', () => {
     const decision = toDecision('SHORT', 'SHORT', 0, 'qwen');
     assert.ok(decision.confidence >= 0 && decision.confidence <= 1);
