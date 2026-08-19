@@ -95,7 +95,8 @@ export interface InferenceBrainOptions {
   privateKey: string;
   /** Cache responses by snapshot hash so re-running a backtest never re-bills. */
   cacheDir?: string;
-  maxConcurrency?: number;
+  /** Stay at or below the provider's 10/min ceiling. */
+  requestsPerMinute?: number;
   /** Verify each response against the provider's TEE signature. */
   verify?: boolean;
   generation?: number;
@@ -111,22 +112,36 @@ export interface InferenceBrain {
   spentOG(): number;
   requests(): number;
   cacheHits(): number;
+  rateLimitHits(): number;
 }
 
-/** Minimal semaphore — the provider is shared infrastructure, so we stay polite. */
-function createLimiter(max: number) {
-  let active = 0;
-  const queue: Array<() => void> = [];
+/**
+ * The provider enforces 10 requests/minute and answers a burst with HTTP 429. We pace
+ * below that ceiling rather than racing it, because a 429 mid-run wastes the whole
+ * remaining queue's wall time on backoff.
+ */
+export const RATE_LIMIT_PER_MIN = 9;
 
-  return async function limit<T>(fn: () => Promise<T>): Promise<T> {
-    if (active >= max) await new Promise<void>((resolve) => queue.push(resolve));
-    active++;
-    try {
-      return await fn();
-    } finally {
-      active--;
-      queue.shift()?.();
-    }
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Serialises calls and spaces them by a minimum interval. */
+function createRateLimiter(requestsPerMinute: number) {
+  const minInterval = 60_000 / requestsPerMinute;
+  let chain: Promise<unknown> = Promise.resolve();
+  let lastStart = 0;
+
+  return function schedule<T>(fn: () => Promise<T>): Promise<T> {
+    const result = chain.then(async () => {
+      const wait = lastStart + minInterval - Date.now();
+      if (wait > 0) await sleep(wait);
+      lastStart = Date.now();
+      return fn();
+    });
+    // keep the chain alive even when a call rejects
+    chain = result.catch(() => undefined);
+    return result as Promise<T>;
   };
 }
 
@@ -138,7 +153,7 @@ export async function createInferenceBrain(
     rpcUrl,
     privateKey,
     cacheDir,
-    maxConcurrency = 4,
+    requestsPerMinute = RATE_LIMIT_PER_MIN,
     verify = true,
     generation = 0,
   } = options;
@@ -148,7 +163,7 @@ export async function createInferenceBrain(
   const broker = await createZGComputeNetworkBroker(wallet);
 
   const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
-  const limit = createLimiter(maxConcurrency);
+  const limit = createRateLimiter(requestsPerMinute);
 
   if (cacheDir) await mkdir(cacheDir, { recursive: true });
 
@@ -158,6 +173,7 @@ export async function createInferenceBrain(
   let verified = 0;
   let verifyAttempts = 0;
   let estimatedSpend = 0;
+  let rateLimitHits = 0;
 
   async function readCache(key: string): Promise<string | undefined> {
     if (!cacheDir) return undefined;
@@ -181,7 +197,8 @@ export async function createInferenceBrain(
     const response = await fetch(`${endpoint}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ messages, model, max_tokens: 8, temperature: 0 }),
+      // Provider rejects max_tokens below 10; the answer is one word, so 10 is plenty.
+      body: JSON.stringify({ messages, model, max_tokens: 10, temperature: 0 }),
       signal: AbortSignal.timeout(60_000),
     });
 
@@ -216,6 +233,27 @@ export async function createInferenceBrain(
     return raw;
   }
 
+  /**
+   * The provider is shared infrastructure, so another tenant can push us over the limit
+   * even when we are pacing correctly. Back off and retry rather than losing the run.
+   */
+  async function askWithRetry(snapshot: MarketSnapshot, attempts = 5): Promise<string> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await limit(() => ask(snapshot));
+      } catch (err) {
+        const message = (err as Error).message;
+        const retryable = message.includes('429') || message.includes('rate limit');
+        if (!retryable || attempt >= attempts - 1) throw err;
+
+        const backoff = 20_000 * (attempt + 1);
+        rateLimitHits++;
+        console.log(`    rate limited, waiting ${backoff / 1000}s (attempt ${attempt + 1})`);
+        await sleep(backoff);
+      }
+    }
+  }
+
   const decide: DecideFn = async (snapshot) => {
     const key = snapshotHash(snapshot);
 
@@ -223,7 +261,7 @@ export async function createInferenceBrain(
     if (raw !== undefined) {
       cacheHits++;
     } else {
-      raw = await limit(() => ask(snapshot));
+      raw = await askWithRetry(snapshot);
       requests++;
       await writeCache(key, raw);
     }
@@ -255,5 +293,6 @@ export async function createInferenceBrain(
     spentOG: () => estimatedSpend,
     requests: () => requests,
     cacheHits: () => cacheHits,
+    rateLimitHits: () => rateLimitHits,
   };
 }

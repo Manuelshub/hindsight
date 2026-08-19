@@ -89,10 +89,11 @@ export async function runBacktest(
     );
   }
 
+  const stride = Math.max(1, cfg.stride);
   const traces: Trace[] = [];
-  const total = last - first + 1;
+  const total = Math.ceil((last - first + 1) / stride);
 
-  for (let i = first; i <= last; i++) {
+  for (let i = first; i <= last; i += stride) {
     const snapshot = buildSnapshot(candles, i, cfg.symbol, cfg.interval);
     const decision = await decide(snapshot);
     const outcome = scoreDecision(candles, i, decision.action, cfg);

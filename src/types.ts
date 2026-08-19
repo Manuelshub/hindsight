@@ -97,6 +97,12 @@ export interface BacktestConfig {
   flatThreshold: number;
   /** round-trip cost as a fraction, applied to non-FLAT positions */
   costPerTrade: number;
+  /**
+   * Decide on every Nth bar rather than every bar. Inference is billed per call, so a
+   * stride of 4 costs a quarter as much while still spanning the whole period. Features
+   * always use the full history; only the decision cadence changes.
+   */
+  stride: number;
 }
 
 export const DEFAULT_BACKTEST: BacktestConfig = {
@@ -105,6 +111,7 @@ export const DEFAULT_BACKTEST: BacktestConfig = {
   horizon: 6,
   flatThreshold: 0.004,
   costPerTrade: 0.0006,
+  stride: 1,
 };
 
 /** Aggregate scoring of a generation — what we register on-chain as its record. */
