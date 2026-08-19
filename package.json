@@ -15,7 +15,8 @@
     "probe": "tsx scripts/probe-network.ts",
     "costs": "tsx scripts/costs.ts",
     "wallet": "tsx scripts/wallet-status.ts",
-    "run": "tsx src/cli/run-generation.ts"
+    "run": "tsx src/cli/run-generation.ts",
+    "status": "tsx src/cli/status.ts"
   },
   "dependencies": {
     "@0gfoundation/0g-compute-ts-sdk": "^0.9.0",

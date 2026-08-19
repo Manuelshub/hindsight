@@ -10,6 +10,22 @@ import type { Candle, Features, MarketSnapshot } from '../types.js';
 /** Bars of history a snapshot needs before its features are well-defined. */
 export const WARMUP = 50;
 
+/**
+ * Bumped whenever the feature set changes shape — a field added, removed, or reordered.
+ *
+ * Invariant I6: two generations are only comparable if they saw the same features. A
+ * change here invalidates every earlier generation's results, so it must start a fresh
+ * lineage rather than silently continuing the existing one.
+ */
+export const FEATURE_VERSION = 1;
+
+/**
+ * Bumped whenever `renderSnapshot` changes its output text, even cosmetically. That
+ * string is the `input` field of every training example, so a change breaks
+ * reproducibility (I4) and comparability (I6) at the same time.
+ */
+export const RENDERER_VERSION = 1;
+
 function mean(xs: number[]): number {
   if (xs.length === 0) return 0;
   return xs.reduce((a, b) => a + b, 0) / xs.length;
