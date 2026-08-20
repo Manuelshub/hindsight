@@ -16,7 +16,8 @@
     "costs": "tsx scripts/costs.ts",
     "wallet": "tsx scripts/wallet-status.ts",
     "run": "tsx src/cli/run-generation.ts",
-    "status": "tsx src/cli/status.ts"
+    "status": "tsx src/cli/status.ts",
+    "train": "tsx src/cli/train.ts"
   },
   "dependencies": {
     "@0gfoundation/0g-compute-ts-sdk": "^0.9.0",

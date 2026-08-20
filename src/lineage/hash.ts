@@ -28,7 +28,9 @@ export const DEFAULT_TRAINING_CONFIG: TrainingConfig = {
   num_train_epochs: 3,
   per_device_train_batch_size: 2,
   learning_rate: 0.0002,
-  max_steps: 100,
+  // High enough that epochs, not steps, decide when training ends:
+  // 259 examples / batch 2 x 3 epochs is about 390 steps.
+  max_steps: 400,
 };
 
 export interface ConfigHashInput {
