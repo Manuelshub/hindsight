@@ -19,3 +19,8 @@ contracts/out/
 contracts/cache/
 contracts/broadcast/
 # contracts/lib is a git submodule (forge-std) — tracked, not ignored
+
+# large model artefacts — reproducible from the on-chain dataset root
+runs/**/adapter/
+runs/**/*.bin
+runs/**/*.zip

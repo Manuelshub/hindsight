@@ -23,6 +23,7 @@ import {
 } from '../config.js';
 import { getCandles } from '../market/feed.js';
 import { RATE_LIMIT_PER_MIN, createInferenceBrain } from '../agent/inference.js';
+import { createAdapterBrain } from '../agent/adapter.js';
 import { computeStats, formatStats, runBacktest } from '../sim/backtest.js';
 import { writeTraces } from '../storage/traces.js';
 import { DEFAULT_BACKTEST } from '../types.js';
@@ -36,6 +37,9 @@ interface Args {
   interval: string;
   dryRun: boolean;
   baseline?: BaselineName;
+  /** Serve decisions from a local adapter instead of paid remote inference. */
+  adapter: boolean;
+  endpoint: string;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -51,6 +55,8 @@ function parseArgs(argv: string[]): Args {
     interval: get('--interval') ?? DEFAULT_BACKTEST.interval,
     dryRun: argv.includes('--dry-run'),
     baseline: get('--baseline') as BaselineName | undefined,
+    adapter: argv.includes('--adapter'),
+    endpoint: get('--endpoint') ?? 'http://127.0.0.1:8177',
   };
 }
 
@@ -109,6 +115,39 @@ async function main() {
     await writeFile(`${dir}/stats.json`, `${JSON.stringify(stats, null, 2)}\n`);
     console.log(`\n${formatStats(stats)}`);
     console.log(`\n  wrote ${dir}/traces.jsonl`);
+    return;
+  }
+
+  // Local adapter: free, unmetered, and the path every generation after 0 takes.
+  if (args.adapter) {
+    const brain = await createAdapterBrain({
+      endpoint: args.endpoint,
+      generation: args.generation,
+    });
+    let lastReport = Date.now();
+    const traces = await runBacktest(candles, brain.decide, cfg, (done, total) => {
+      if (Date.now() - lastReport > 5000) {
+        lastReport = Date.now();
+        console.log(
+          `  ${done}/${total} (${((done / total) * 100).toFixed(0)}%)  ` +
+            `${brain.meanLatencyMs().toFixed(0)}ms/decision`,
+        );
+      }
+    });
+    const stats = computeStats(traces, cfg);
+    await mkdir(dir, { recursive: true });
+    await writeTraces(`${dir}/traces.jsonl`, traces);
+    await writeFile(
+      `${dir}/stats.json`,
+      `${JSON.stringify(
+        { ...stats, parseFailureRate: brain.parseFailureRate(), window: { from, to }, config: cfg },
+        null,
+        2,
+      )}\n`,
+    );
+    console.log(`\n${formatStats(stats)}`);
+    console.log(`  parse failures ${(brain.parseFailureRate() * 100).toFixed(2)}%`);
+    console.log(`\n  wrote ${dir}/traces.jsonl and ${dir}/stats.json`);
     return;
   }
 

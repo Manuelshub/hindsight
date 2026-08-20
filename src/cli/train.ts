@@ -224,13 +224,25 @@ async function main() {
       record = { ...record, state: 'ACKNOWLEDGED', updatedAt: Date.now() };
       await saveTaskRecord(statePath, record);
 
+      // The provider publishes `encryptedSecret` on-chain a little after the
+      // acknowledgement is mined, so decrypting immediately fails with an opaque
+      // "second arg must be public key". Retry rather than surfacing that to the user.
       const decrypted = `${dir}/adapter.zip`;
-      await broker.fineTuning.decryptModel(
-        providerAddress,
-        record.taskId!,
-        encrypted,
-        decrypted,
-      );
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await broker.fineTuning.decryptModel(
+            providerAddress,
+            record.taskId!,
+            encrypted,
+            decrypted,
+          );
+          break;
+        } catch (err) {
+          if (attempt >= 10) throw err;
+          console.log(`  decryption key not published yet (attempt ${attempt}), waiting 30s`);
+          await sleep(30_000);
+        }
+      }
       record = {
         ...record,
         state: 'DECRYPTED',
