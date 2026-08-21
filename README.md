@@ -215,8 +215,14 @@ Baselines over 3,000 hourly BTCUSDT candles. Every generation is measured agains
 | mean-reversion | 42.12% | -9.87% | -0.73 |
 | momentum | 33.87% | -76.99% | -6.45 |
 
-**46.33% is the number to beat.** Doing nothing is the hardest baseline, because FLAT is
-the correct answer 48% of the time.
+**46.33% is the number to beat on this window.** Doing nothing is the hardest baseline
+here, because FLAT is the correct answer 48% of the time in this period.
+
+That figure is regime-dependent and must never be hardcoded as a universal comparator.
+Measured on a held-out Jan to Apr 2026 window, always-flat scores **33.80%**, because that
+regime is far more directional. Any evaluation recomputes the always-flat control from the
+same bars the brain was judged on, rather than comparing against a number from a different
+period.
 
 ### Generations
 
