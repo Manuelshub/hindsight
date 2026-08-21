@@ -17,7 +17,7 @@
  * with no way to falsify it after the fact.
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { Candle, Trace } from './project.js';
 import { WARMUP } from './project.js';
 import type { Holdout, HoldoutManifest, WindowRelation } from './types.js';
@@ -183,14 +183,17 @@ export interface LoadOptions {
  * a compromised window is not a verdict on the brain and must never be reported as one.
  */
 export function loadHoldout(options: LoadOptions): Holdout {
-  const manifest = readManifest(options.manifestPath);
+  const manifestPath = options.manifestPath ?? MANIFEST_PATH;
+  const manifest = readManifest(manifestPath);
   const spec = manifest.windows.find((w) => w.name === options.window);
   if (!spec) {
     const names = manifest.windows.map((w) => w.name).join(', ');
     throw new HoldoutError(`unknown window "${options.window}" — manifest has: ${names}`);
   }
 
-  const path = join(EVALS_DIR, 'data', spec.file);
+  // Resolved next to the manifest that named it, so a fixture set can be relocated or
+  // stood up in a temporary directory without the two halves drifting apart.
+  const path = join(dirname(manifestPath), spec.file);
   if (!existsSync(path)) {
     throw new HoldoutError(`manifest lists ${spec.file} but ${path} is missing`);
   }

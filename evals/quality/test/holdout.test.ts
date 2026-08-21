@@ -8,11 +8,14 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { WARMUP } from '../harness/project.js';
-import { isHeldOut, scoreableIndices } from '../harness/holdout.js';
+import { HoldoutError, isHeldOut, loadHoldout, scoreableIndices } from '../harness/holdout.js';
 import type { TrainingBoundary } from '../harness/holdout.js';
-import { makeCandles } from './fixtures.js';
+import { makeCandles, makeManifest } from './fixtures.js';
 
 const HORIZON = 6;
 const candles = makeCandles(200);
@@ -81,5 +84,60 @@ describe('scoreableIndices', () => {
     for (const i of scoreableIndices(candles, HORIZON, 'after', boundary)) {
       assert.ok(candles[i + HORIZON] !== undefined);
     }
+  });
+});
+
+describe('loadHoldout', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'holdout-'));
+  const manifestPath = join(dir, 'manifest.json');
+
+  function write(training: { startAt: number; endAt: number }, runs?: number): void {
+    writeFileSync(join(dir, 'fixture.json'), JSON.stringify(candles));
+    const manifest = makeManifest(training.startAt, training.endAt);
+    manifest.windows[0]!.file = 'fixture.json';
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    if (runs !== undefined) {
+      const runDir = join(dir, 'runs', 'gen-0');
+      mkdirSync(runDir, { recursive: true });
+      writeFileSync(
+        join(runDir, 'stats.json'),
+        JSON.stringify({
+          config: { horizon: HORIZON, interval: '1h' },
+          window: {
+            from: new Date(candles[0]!.openTime).toISOString().slice(0, 16),
+            to: new Date(candles[runs]!.closeTime).toISOString().slice(0, 16),
+          },
+        }),
+      );
+    }
+  }
+
+  it('loads a window whose fixture sits beside its manifest', () => {
+    write({ startAt: 0, endAt: candles[100]!.closeTime });
+    const holdout = loadHoldout({ window: 'fixture', horizon: HORIZON, manifestPath, runsDir: dir });
+    assert.ok(holdout.scoreable.length > 0);
+    assert.ok(holdout.scoreable.every((i) => candles[i]!.closeTime > candles[100]!.closeTime));
+  });
+
+  it('rejects a window the manifest does not describe', () => {
+    write({ startAt: 0, endAt: candles[100]!.closeTime });
+    assert.throws(
+      () => loadHoldout({ window: 'ghost', horizon: HORIZON, manifestPath, runsDir: dir }),
+      HoldoutError,
+    );
+  });
+
+  /**
+   * The check that makes the separation claim falsifiable. A generation trained on data
+   * newer than the frozen fixture would otherwise be graded on its own training set, and
+   * every number the suite printed would be a lie told with a straight face.
+   */
+  it('refuses to run when training data on disk has passed the frozen boundary', () => {
+    write({ startAt: 0, endAt: candles[100]!.closeTime }, 150);
+    assert.throws(
+      () => loadHoldout({ window: 'fixture', horizon: HORIZON, manifestPath, runsDir: join(dir, 'runs') }),
+      /training data on disk has moved past/,
+    );
   });
 });

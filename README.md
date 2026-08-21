@@ -237,19 +237,46 @@ Same 736-decision window, Apr 12 to Aug 15.
 | parse failures | 0.00% | 0.00% |
 | actions | L:682 S:54 F:0 | L:394 S:342 F:0 |
 
-The action row is the result. Generation 0 answered LONG 93% of the time. Generation 1
-answers LONG 54%. Training on its own hindsight-labelled mistakes measurably corrected a
-directional bias.
+**Generation 1 did not learn the task, and the numbers above must not be read as
+improvement.** Root-cause analysis is in
+[services/agent/DIAGNOSIS-flat-blindness.md](services/agent/DIAGNOSIS-flat-blindness.md).
 
-**These numbers are in-sample and are not evidence of improvement.** Generation 1 trained
-on generation 0's mistakes drawn from this same window, so it has effectively seen the
-evaluation data. That is precisely the curve-fitting the sealed evaluation exists to rule
-out, and nothing here may be reported as improvement until it is re-run on post-seal data.
+The adapter's output does not depend on its input. Constrained three-way scoring by true
+class:
 
-**Generation 1 still never emits FLAT.** Zero times in 736 decisions, despite 86 FLAT
-examples in a balanced 259-example training set. FLAT is right 48% of the time, so the
-largest single source of error is untouched and both generations sit far below the
-always-flat baseline. Root-cause work is open.
+| true class | P(LONG) | P(SHORT) | P(FLAT) |
+|---|---|---|---|
+| LONG | 0.4382 | 0.4131 | 0.1487 |
+| SHORT | 0.4257 | 0.4235 | 0.1508 |
+| FLAT | 0.4320 | 0.4274 | 0.1406 |
+
+Identical to within 0.03. It emits a fixed 43/43/14 marginal regardless of the market, so
+greedy decoding alternates LONG and SHORT and can never reach FLAT. That is the
+394/342/0 in the table, and it is not a corrected directional bias.
+
+The mechanism: the provider packed 259 examples into 66 blocks of ~512 tokens and took
+loss over every token. `renderSnapshot()` emits a fixed 121-token template, so the answer
+word carried **1.02% of the training loss**. The reported convergence from 6.49 to 0.109
+is template memorisation with the task itself at the noise floor. The adapter cannot
+reproduce labels on its own training data: 0 out of 5 on examples it saw for roughly 12
+epochs.
+
+Two further findings. The base model picks FLAT 12/12 before fine-tuning, so there was no
+anti-FLAT prior to overcome. Fine-tuning made FLAT worse, 0.494 to 0.245. And FLAT peaked
+at checkpoint-200 and degraded by checkpoint-400; 0G ships the final checkpoint, so the
+run delivered the worse one.
+
+**These numbers are also in-sample.** Generation 1 trained on generation 0's mistakes
+drawn from this same window. Even had it learned, nothing here could be reported as
+improvement until re-run on post-seal data.
+
+The fix is constrained: the training config is rigid, keys cannot be added, so
+completion-only loss masking is unavailable and the root cause cannot be addressed
+directly. The prescribed work-around folds the verbatim serving prompt into the training
+input, renames FLAT to the single-token `NONE` on the wire, oversamples FLAT, and stops at
+200 steps. Honest prediction: generation 2 emits FLAT at a usable rate but stays near
+chance on accuracy, because 1% gradient weight cannot teach a conditional. That converts
+an unmeasurable failure into a measurable one.
 
 ---
 

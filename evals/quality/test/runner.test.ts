@@ -223,6 +223,7 @@ describe('sampling', () => {
     const full = await runEval(options(truthful()));
 
     assert.equal(report.integrity.decisions, 120);
+    assert.equal(report.window.from, full.window.from);
     assert.equal(report.window.to, full.window.to);
   });
 });

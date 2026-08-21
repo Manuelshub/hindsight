@@ -98,9 +98,12 @@ function check(
 function selectIndices(scoreable: number[], stride: number, max?: number): number[] {
   const strided = scoreable.filter((_, k) => k % Math.max(1, stride) === 0);
   if (max === undefined || strided.length <= max) return strided;
+  if (max <= 1) return strided.slice(0, max);
 
-  const step = strided.length / max;
-  return Array.from({ length: max }, (_, k) => strided[Math.floor(k * step)]!);
+  // Both endpoints included, so a capped run still spans the window edge to edge and its
+  // reported date range is the same one the uncapped run would have printed.
+  const step = (strided.length - 1) / (max - 1);
+  return Array.from({ length: max }, (_, k) => strided[Math.round(k * step)]!);
 }
 
 export async function runEval(options: RunOptions): Promise<EvalReport> {
@@ -194,6 +197,7 @@ export async function runEval(options: RunOptions): Promise<EvalReport> {
         probes: options.probes,
         repeats: options.repeats,
         seed: options.seed,
+        faultLimit: options.faultLimit,
       });
     } catch (err) {
       throw new ServiceUnavailableError(

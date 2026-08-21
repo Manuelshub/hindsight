@@ -28,6 +28,8 @@ export interface ProbeOptions {
   probes: number;
   repeats: number;
   seed: number;
+  /** Consecutive throws that end the probe as an outage, matching the main pass. */
+  faultLimit: number;
 }
 
 export class RenderDriftError extends Error {
@@ -59,6 +61,7 @@ export async function probeConsistency(
   }
 
   const results: Array<{ at: number; answers: Side[] }> = [];
+  let consecutiveFaults = 0;
 
   for (const index of chosen) {
     const original = buildSnapshot(options.candles, index, options.cfg.symbol, options.cfg.interval);
@@ -68,7 +71,18 @@ export async function probeConsistency(
       const nudged = { ...original, at: original.at + r };
       if (renderSnapshot(nudged) !== renderSnapshot(original)) throw new RenderDriftError();
 
-      const decision = await decide(nudged);
+      let decision;
+      try {
+        decision = await decide(nudged);
+        consecutiveFaults = 0;
+      } catch (err) {
+        // A dropped repeat is one fewer vote, not a disagreement. Scoring it as a flip
+        // would report a flaky network as a flaky model, which is the exact confusion the
+        // outage/quality split exists to prevent.
+        if (++consecutiveFaults >= options.faultLimit) throw err;
+        continue;
+      }
+
       // An illegal action is a quality failure the main pass already counts; treating it
       // as FLAT here keeps the probe about agreement rather than double-charging for it.
       answers.push(isSide(decision.action) ? decision.action : 'FLAT');
