@@ -181,44 +181,69 @@ Discord if you plan to run multiple generations.
 
 ```bash
 # what's live on 0G right now — services, providers, TEE attestation
-pnpm tsx scripts/probe-network.ts testnet
+pnpm probe testnet
 
 # live pricing and a projected cost for a full run
-pnpm tsx scripts/costs.ts
+pnpm costs
 
 # operator wallet address and balances
-pnpm tsx scripts/wallet-status.ts
+pnpm wallet
 
 # run a deterministic baseline over real market data
-pnpm tsx src/cli/backtest.ts momentum BTCUSDT 1h 3000
+pnpm backtest momentum BTCUSDT 1h 3000
+
+# operator dashboard: ledger, trainer occupancy, forfeit clocks
+pnpm status
 ```
 
 Run the test suite:
 
 ```bash
-pnpm test          # TypeScript
-cd contracts && forge test   # Solidity
+pnpm test            # TypeScript, 74 gate tests
+pnpm test:contracts  # Solidity, 20 tests
 ```
 
 ---
 
 ## Results so far
 
-Baselines over 3,000 hourly BTCUSDT candles. These are the controls every generation must be
-measured against:
+Baselines over 3,000 hourly BTCUSDT candles. Every generation is measured against these:
 
 | strategy | accuracy | cumulative return | Sharpe |
 |---|---|---|---|
 | always-flat | **46.33%** | 0.00% | 0.00 |
-| mean-reversion | 42.12% | −9.87% | −0.73 |
-| momentum | 33.87% | −76.99% | −6.45 |
+| mean-reversion | 42.12% | -9.87% | -0.73 |
+| momentum | 33.87% | -76.99% | -6.45 |
 
-**46.33% is the number to beat.** Doing nothing is the hardest baseline, because FLAT is the
-correct answer 46% of the time. Any generation that fails to clear it has learned nothing,
-and will be reported as such.
+**46.33% is the number to beat.** Doing nothing is the hardest baseline, because FLAT is
+the correct answer 48% of the time.
 
-Generation results will be published here with their on-chain seal and explorer links as
-they are produced.
+### Generations
+
+Same 736-decision window, Apr 12 to Aug 15.
+
+| | gen 0 (7B remote) | gen 1 (0.5B LoRA) |
+|---|---|---|
+| accuracy | 23.78% | 25.95% |
+| cumulative | -51.94% | -41.04% |
+| Sharpe | -10.07 | -7.25 |
+| max drawdown | 54.78% | 42.13% |
+| parse failures | 0.00% | 0.00% |
+| actions | L:682 S:54 F:0 | L:394 S:342 F:0 |
+
+The action row is the result. Generation 0 answered LONG 93% of the time. Generation 1
+answers LONG 54%. Training on its own hindsight-labelled mistakes measurably corrected a
+directional bias.
+
+**These numbers are in-sample and are not evidence of improvement.** Generation 1 trained
+on generation 0's mistakes drawn from this same window, so it has effectively seen the
+evaluation data. That is precisely the curve-fitting the sealed evaluation exists to rule
+out, and nothing here may be reported as improvement until it is re-run on post-seal data.
+
+**Generation 1 still never emits FLAT.** Zero times in 736 decisions, despite 86 FLAT
+examples in a balanced 259-example training set. FLAT is right 48% of the time, so the
+largest single source of error is untouched and both generations sit far below the
+always-flat baseline. Root-cause work is open.
 
 ---
 
