@@ -9,15 +9,17 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/*.test.ts",
+    "test": "tsx --test services/*/test/*.test.ts",
     "test:contracts": "cd contracts && forge test",
-    "backtest": "tsx src/cli/backtest.ts",
+    "backtest": "tsx cli/backtest.ts",
     "probe": "tsx scripts/probe-network.ts",
     "costs": "tsx scripts/costs.ts",
     "wallet": "tsx scripts/wallet-status.ts",
-    "run": "tsx src/cli/run-generation.ts",
-    "status": "tsx src/cli/status.ts",
-    "train": "tsx src/cli/train.ts"
+    "run": "tsx cli/run-generation.ts",
+    "status": "tsx cli/status.ts",
+    "train": "tsx cli/train.ts",
+    "eval": "tsx evals/cli.ts",
+    "eval:test": "tsx --test evals/*.test.ts"
   },
   "dependencies": {
     "@0gfoundation/0g-compute-ts-sdk": "^0.9.0",

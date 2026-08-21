@@ -129,6 +129,24 @@ free and only training touches the ledger.
 
 ---
 
+## Layout
+
+Services-first. Each service owns its code, tests, and README, and can be worked on
+without touching another.
+
+    schemas/              domain types shared across services
+    config/               network endpoints, provider addresses, env loading
+    services/
+      market/             candles, features, prompt rendering
+      agent/              brains (baseline, remote, adapter) + curriculum
+      scoring/            hindsight labelling, stats, sealed evaluation
+      storage/            trace persistence + 0G Storage
+      training/           fine-tuning state machine
+      lineage/            on-chain commitment client
+    contracts/            Solidity (Foundry)
+    serving/              Python LoRA adapter server
+    cli/                  glue only, no business logic
+
 ## Setup
 
 Requirements: Node ≥ 20, pnpm, Python 3.10+ (for adapter serving), [Foundry](https://getfoundry.sh)

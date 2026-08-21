@@ -1,12 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": [
-      "ES2023"
-    ],
+    "lib": ["ES2023"],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "outDir": "dist",
+    "noEmit": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -14,17 +12,9 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "types": ["node"]
   },
-  "include": [
-    "schemas/**/*.ts",
-    "config/**/*.ts",
-    "services/**/*.ts",
-    "cli/**/*.ts",
-    "scripts/**/*.ts",
-    "evals/**/*.ts"
-  ],
-  "exclude": [
-    "evals"
-  ]
+  "include": ["**/*.ts"],
+  "exclude": []
 }
