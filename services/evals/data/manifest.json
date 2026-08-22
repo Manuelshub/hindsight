@@ -1,0 +1,36 @@
+{
+  "builtAt": "2026-08-21T18:11:52.702Z",
+  "symbol": "BTCUSDT",
+  "interval": "1h",
+  "barMs": 3600000,
+  "training": {
+    "startAt": 1776013200000,
+    "endAt": 1786813199999,
+    "sources": [
+      "runs/gen-0/traces.jsonl",
+      "runs/gen-0/stats.json",
+      "runs/gen-1/traces.jsonl",
+      "runs/gen-1/stats.json"
+    ]
+  },
+  "windows": [
+    {
+      "name": "forward",
+      "relation": "after",
+      "file": "holdout-BTCUSDT-1h-forward.json",
+      "candles": 546,
+      "scoreable": 140,
+      "from": "2026-07-30T01:00:00.000Z",
+      "to": "2026-08-21T18:59:59.999Z"
+    },
+    {
+      "name": "pre",
+      "relation": "before",
+      "file": "holdout-BTCUSDT-1h-pre.json",
+      "candles": 1200,
+      "scoreable": 1144,
+      "from": "2026-02-21T17:00:00.000Z",
+      "to": "2026-04-12T16:59:59.999Z"
+    }
+  ]
+}

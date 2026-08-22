@@ -21,10 +21,6 @@
     "config/**/*.ts",
     "services/**/*.ts",
     "cli/**/*.ts",
-    "scripts/**/*.ts",
-    "evals/**/*.ts"
-  ],
-  "exclude": [
-    "evals"
+    "scripts/**/*.ts"
   ]
 }

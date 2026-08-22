@@ -18,8 +18,8 @@
     "run": "tsx cli/run-generation.ts",
     "status": "tsx cli/status.ts",
     "train": "tsx cli/train.ts",
-    "eval": "tsx evals/cli.ts",
-    "eval:test": "tsx --test evals/*.test.ts"
+    "eval": "tsx services/evals/src/cli.ts",
+    "eval:test": "tsx --test 'services/evals/test/*.test.ts'"
   },
   "dependencies": {
     "@0gfoundation/0g-compute-ts-sdk": "^0.9.0",
