@@ -603,3 +603,49 @@ Base model `Qwen/Qwen2.5-0.5B-Instruct` from the local HF cache. Adapter server 
 on port 8177 throughout (`{"ok": true, "generation": 1}`).
 
 **No files in the repo were modified by this investigation.**
+
+---
+
+## Verification of Fix 0, run independently 2026-08-22
+
+Fix 0 was executed as a read-only probe against the gen-1 adapter on real snapshots drawn
+from `runs/gen-0/traces.jsonl`. `serving/server.py` was not modified. Script:
+`/tmp/flat-precheck/probe2.py`.
+
+### First pass, 12 snapshots where FLAT is the correct answer
+
+| format | LONG | SHORT | FLAT | FLAT rate |
+|---|---|---|---|---|
+| chat template (current serving) | 6 | 6 | 0 | 0% |
+| alpaca | 0 | 1 | 11 | **92%** |
+
+11/12, matching the predicted 11/12 exactly. Format sensitivity is real.
+
+### Second pass, 8 snapshots per true class, balanced
+
+| true | format | LONG | SHORT | FLAT | correct |
+|---|---|---|---|---|---|
+| LONG | chat | 4 | 4 | 0 | 4/8 |
+| LONG | alpaca | 0 | 1 | 7 | 0/8 |
+| SHORT | chat | 5 | 3 | 0 | 3/8 |
+| SHORT | alpaca | 0 | 3 | 5 | 3/8 |
+| FLAT | chat | 5 | 3 | 0 | 0/8 |
+| FLAT | alpaca | 0 | 1 | 7 | 7/8 |
+
+Overall: chat 7/24 (29%), alpaca 10/24 (42%), chance 33%, always-FLAT on this balanced
+sample 8/24 (33%).
+
+### What this settles
+
+The alpaca rows barely move across true classes: 7, 5, 7 FLAT out of 8 regardless of what
+the market did. The adapter answers FLAT about 79% of the time under alpaca and 0% under
+chat. **That is a second fixed marginal, not input-dependence.** The report's own warning
+holds: this trades one broken marginal for another and must not be shipped as the fix.
+
+The apparent jump from 29% to 42% is not skill. Alpaca guesses FLAT constantly and FLAT is
+one of three balanced classes here, so the gain is close to what always-FLAT scores anyway.
+At n=24 the residual is noise.
+
+Conclusion: cause #2 (format mismatch) is confirmed and large. The root cause, the label
+carrying ~1% of the training loss, is untouched by prompting alone and still requires
+Fix 1 through Fix 4.
