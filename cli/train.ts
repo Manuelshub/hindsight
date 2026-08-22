@@ -148,12 +148,31 @@ async function main() {
     );
     const heldOG = held ? Number(ethers.formatEther(held[1])) : 0;
 
-    // The provider warns below 1 0G, and bills actual tokens rather than our estimate.
-    const targetFunding = Math.max(1, cost * 3);
-    if (heldOG >= targetFunding) {
-      console.log(`  sub-account already holds ${heldOG.toFixed(4)} 0G — skipping transfer`);
+    // Three times the projection, because the provider bills actual tokens rather than
+    // our estimate. The provider also warns below 1 0G, so that is the floor we top up
+    // toward — but only when the balance does not already cover the run. Chasing the
+    // floor when it does turns a funded task into a failed transfer over rounding dust.
+    const needed = cost * 3;
+    const targetFunding = Math.max(1, needed);
+
+    if (heldOG >= needed) {
+      console.log(
+        `  sub-account holds ${heldOG.toFixed(4)} 0G, run needs ~${needed.toFixed(4)} 0G` +
+          ' — skipping transfer',
+      );
     } else {
-      const fund = targetFunding - heldOG;
+      // Never ask for more than the ledger can actually release.
+      const ledger = await broker.ledger.getLedger();
+      const available = Number(ethers.formatEther(ledger.availableBalance ?? 0n));
+      const fund = Math.min(targetFunding - heldOG, available);
+
+      if (fund <= 0) {
+        throw new Error(
+          `sub-account holds ${heldOG.toFixed(4)} 0G, run needs ${needed.toFixed(4)} 0G, ` +
+            'and the ledger has nothing available — deposit more before retrying',
+        );
+      }
+
       console.log(`  funding provider sub-account with ${fund.toFixed(4)} 0G`);
       await broker.ledger.transferFund(
         providerAddress,
