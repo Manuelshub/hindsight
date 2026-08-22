@@ -14,10 +14,10 @@ describe('parseAction — accepts genuine answers', () => {
   const accepted: Array<[string, string]> = [
     ['LONG', 'LONG'],
     ['SHORT', 'SHORT'],
-    ['FLAT', 'FLAT'],
+    ['NONE', 'FLAT'],
     ['long', 'LONG'],
     ['  Short  ', 'SHORT'],
-    ['FLAT.', 'FLAT'],
+    ['NONE.', 'FLAT'],
     ['Answer: LONG', 'LONG'],
     ['**SHORT**', 'SHORT'],
   ];
@@ -31,6 +31,10 @@ describe('parseAction — accepts genuine answers', () => {
 
 describe('parseAction — rejects non-answers', () => {
   const rejected = [
+    // FLAT is off-vocabulary now. The model is instructed to answer NONE, so a reply of
+    // FLAT means it ignored the instruction, and that should surface as a parse failure
+    // rather than be quietly accepted.
+    'FLAT',
     '',
     '   ',
     'I cannot provide financial advice.',

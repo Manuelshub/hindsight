@@ -9,21 +9,12 @@ import { createZGComputeNetworkBroker } from '@0gfoundation/0g-compute-ts-sdk';
 
 import type { Decision, MarketSnapshot, Side } from '../../../schemas/index.js';
 import type { DecideFn } from '../../scoring/src/backtest.js';
-import { renderSnapshot } from '../../market/src/indicators.js';
+import { FROM_WIRE, SYSTEM_PROMPT, WIRE, WIRE_WORDS, servingPrompt } from './prompt.js';
 
-const SIDES: readonly Side[] = ['LONG', 'SHORT', 'FLAT'];
 
 /** Measured on testnet 2026-08-15. Used only for spend estimation, never for billing. */
 export const MEASURED_INPUT_PRICE_OG = 1.1e-6;
 export const MEASURED_OUTPUT_PRICE_OG = 4.43e-6;
-
-const SYSTEM_PROMPT = [
-  'You are a disciplined systematic trading agent.',
-  'Given a market snapshot, reply with exactly one word: LONG, SHORT, or FLAT.',
-  'Use LONG if you expect price to rise, SHORT if you expect it to fall,',
-  'and FLAT when neither direction is clearly favoured.',
-  'Reply with the single word only. No punctuation, no explanation.',
-].join('\n');
 
 /**
  * Extracts an action from a raw model response.
@@ -36,8 +27,8 @@ const SYSTEM_PROMPT = [
 export function parseAction(raw: string): Side | null {
   if (!raw) return null;
 
-  const found = SIDES.filter((side) => new RegExp(`\\b${side}\\b`, 'i').test(raw));
-  return found.length === 1 ? found[0]! : null;
+  const found = WIRE_WORDS.filter((word) => new RegExp(`\\b${word}\\b`, 'i').test(raw));
+  return found.length === 1 ? FROM_WIRE[found[0]!]! : null;
 }
 
 /** Stable hash of a snapshot, used as the response cache key. */
@@ -64,9 +55,11 @@ export function snapshotHash(snapshot: MarketSnapshot): string {
 export function buildMessages(
   snapshot: MarketSnapshot,
 ): Array<{ role: 'system' | 'user'; content: string }> {
+  const body = servingPrompt(snapshot);
+  const split = body.indexOf('\n\n');
   return [
     { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: `${renderSnapshot(snapshot)}\n\nAction:` },
+    { role: 'user', content: body.slice(split + 2) },
   ];
 }
 
@@ -78,7 +71,7 @@ export function toDecision(
 ): Decision {
   // A one-word reply is the instructed format; anything longer means the model padded
   // its answer, which historically correlates with hedging.
-  const terse = raw.trim().replace(/[^A-Za-z]/g, '').toUpperCase() === action;
+  const terse = raw.trim().replace(/[^A-Za-z]/g, '').toUpperCase() === WIRE[action];
 
   return {
     action,

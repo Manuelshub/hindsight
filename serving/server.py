@@ -21,13 +21,16 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 BASE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
-ACTIONS = ("LONG", "SHORT", "FLAT")
+# The model answers in the wire vocabulary. NONE is a single token; FLAT is FL+AT, which
+# biases greedy decoding against it. The domain type stays FLAT; only the word changes.
+WIRE_WORDS = ("LONG", "SHORT", "NONE")
+FROM_WIRE = {"LONG": "LONG", "SHORT": "SHORT", "NONE": "FLAT"}
 
 SYSTEM_PROMPT = (
     "You are a disciplined systematic trading agent.\n"
-    "Given a market snapshot, reply with exactly one word: LONG, SHORT, or FLAT.\n"
+    "Given a market snapshot, reply with exactly one word: LONG, SHORT, or NONE.\n"
     "Use LONG if you expect price to rise, SHORT if you expect it to fall,\n"
-    "and FLAT when neither direction is clearly favoured.\n"
+    "and NONE when neither direction is clearly favoured.\n"
     "Reply with the single word only. No punctuation, no explanation."
 )
 
@@ -42,8 +45,8 @@ def parse_action(raw: str):
     """
     if not raw:
         return None
-    found = [a for a in ACTIONS if re.search(rf"\b{a}\b", raw, re.IGNORECASE)]
-    return found[0] if len(found) == 1 else None
+    found = [w for w in WIRE_WORDS if re.search(rf"\b{w}\b", raw, re.IGNORECASE)]
+    return FROM_WIRE[found[0]] if len(found) == 1 else None
 
 
 def load(adapter_path: str, base_model: str):

@@ -9,6 +9,7 @@
  */
 import { ethers } from 'ethers';
 import { FEATURE_VERSION, RENDERER_VERSION } from '../../market/src/indicators.js';
+import { PROMPT_VERSION } from '../../agent/src/prompt.js';
 import type { BacktestConfig } from '../../../schemas/index.js';
 
 export interface TrainingConfig {
@@ -24,13 +25,16 @@ export interface TrainingConfig {
  * legal shape. Values may change; keys may not.
  */
 export const DEFAULT_TRAINING_CONFIG: TrainingConfig = {
-  neftune_noise_alpha: 5,
+  // Embedding noise regularises against overfitting; this run must memorise through a
+  // loss channel that carries about 1% of the gradient.
+  neftune_noise_alpha: 0,
   num_train_epochs: 3,
   per_device_train_batch_size: 2,
-  learning_rate: 0.0002,
-  // High enough that epochs, not steps, decide when training ends:
-  // 259 examples / batch 2 x 3 epochs is about 390 steps.
-  max_steps: 400,
+  learning_rate: 0.0003,
+  // FLAT peaked at step 200 and degraded by 400, and the provider ships the final
+  // checkpoint rather than the best one. Stopping at the good checkpoint is the only
+  // way to receive it.
+  max_steps: 200,
 };
 
 export interface ConfigHashInput {
@@ -49,6 +53,9 @@ export function computeConfigHash(input: ConfigHashInput): string {
   const canonical = JSON.stringify({
     featureVersion: FEATURE_VERSION,
     rendererVersion: RENDERER_VERSION,
+    // Without this a prompt rewrite changes what the model reads while leaving the
+    // on-chain commitment identical.
+    promptVersion: PROMPT_VERSION,
     baseModel,
     training: {
       neftune_noise_alpha: training.neftune_noise_alpha,

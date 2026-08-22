@@ -10,7 +10,7 @@
  *    into always-FLAT, which scores well on accuracy while learning nothing.
  */
 import type { Side, Trace } from '../../../schemas/index.js';
-import { renderSnapshot } from '../../market/src/indicators.js';
+import { WIRE, WIRE_WORDS, type WireWord, servingPrompt } from './prompt.js';
 
 export const INSTRUCTION =
   'You are a trading agent. Given market features, respond with exactly one of LONG, SHORT, or FLAT.';
@@ -26,8 +26,11 @@ const SIDES: readonly Side[] = ['LONG', 'SHORT', 'FLAT'];
 export interface TrainingExample {
   instruction: string;
   input: string;
-  /** Always the hindsight label — never what the model originally said. */
-  output: Side;
+  /**
+   * The hindsight label in wire vocabulary, never what the model originally said.
+   * FLAT is written as NONE; see prompt.ts for why.
+   */
+  output: WireWord;
 }
 
 export interface CurriculumOptions {
@@ -60,11 +63,19 @@ function byTime(a: Trace, b: Trace): number {
   return a.snapshot.at - b.snapshot.at || a.id.localeCompare(b.id);
 }
 
+/**
+ * The whole served prompt goes in `input`, not just the snapshot.
+ *
+ * The provider discards `instruction` and wraps the example in its own template, so the
+ * only way to guarantee the model trains on the token sequence it will be served is to put
+ * that sequence inside a field that survives wrapping. Generation 1 trained on a bare
+ * snapshot and was served a system prompt plus an "Action:" suffix it had never seen.
+ */
 function toExample(trace: Trace): TrainingExample {
   return {
     instruction: INSTRUCTION,
-    input: renderSnapshot(trace.snapshot),
-    output: trace.outcome.hindsight,
+    input: servingPrompt(trace.snapshot),
+    output: WIRE[trace.outcome.hindsight],
   };
 }
 
@@ -107,7 +118,14 @@ function dedupe(traces: Trace[], epsilon: number): Trace[] {
   return kept;
 }
 
-/** Caps every present class to the size of the smallest, keeping the earliest of each. */
+/**
+ * FLAT survives training at roughly 0.42x its share of the dataset. Measured on generation
+ * 1: a balanced 33.2% FLAT set produced 14% FLAT at inference, a 2.4x shrinkage. Feeding
+ * parity therefore lands well under a third, so FLAT is over-weighted to compensate.
+ */
+export const CLASS_WEIGHT: Record<Side, number> = { LONG: 1, SHORT: 1, FLAT: 2.4 };
+
+/** Caps each class to a weighted multiple of the smallest, keeping the earliest of each. */
 function balance(traces: Trace[]): Trace[] {
   const groups = new Map<Side, Trace[]>();
   for (const trace of traces) {
@@ -117,20 +135,41 @@ function balance(traces: Trace[]): Trace[] {
   }
 
   const smallest = Math.min(...[...groups.values()].map((g) => g.length));
-  return [...groups.values()].flatMap((group) => group.slice(0, smallest)).sort(byTime);
+  return [...groups.entries()]
+    .flatMap(([side, group]) => group.slice(0, Math.round(smallest * CLASS_WEIGHT[side])))
+    .sort(byTime);
 }
 
 /**
- * Truncates to the token budget, taking the most recent examples first and round-robining
- * across classes so a truncated set stays balanced. Recent examples are preferred because
- * they reflect the market regime the next generation will actually trade in.
+ * Draw order for the budget round-robin, weighted so truncation preserves the class
+ * proportions `balance()` established.
+ *
+ * An even round-robin silently undoes oversampling: with FLAT weighted 2.4x, an even draw
+ * truncates back to parity and the whole point of the weighting is lost. Weights are
+ * scaled to integers and expanded into a repeating schedule.
+ */
+function drawOrder(): WireWord[] {
+  const scale = 5;
+  const order: WireWord[] = [];
+  for (const side of ['LONG', 'SHORT', 'FLAT'] as Side[]) {
+    const slots = Math.max(1, Math.round(CLASS_WEIGHT[side] * scale));
+    for (let i = 0; i < slots; i++) order.push(WIRE[side]);
+  }
+  return order;
+}
+
+/**
+ * Truncates to the token budget, taking the most recent examples first and drawing across
+ * classes in weighted order so a truncated set keeps its intended proportions. Recent
+ * examples are preferred because they reflect the regime the next generation will trade in.
  */
 function applyBudget(examples: TrainingExample[], maxTokens: number): TrainingExample[] {
   const total = examples.reduce((sum, e) => sum + exampleTokens(e), 0);
   if (total <= maxTokens) return examples;
 
-  const queues = new Map<Side, TrainingExample[]>();
-  for (const side of SIDES) queues.set(side, []);
+  const queues = new Map<WireWord, TrainingExample[]>();
+  for (const word of WIRE_WORDS) queues.set(word, []);
+  const order = drawOrder();
   // reversed => most recent first
   for (const example of [...examples].reverse()) {
     queues.get(example.output)?.push(example);
@@ -142,8 +181,8 @@ function applyBudget(examples: TrainingExample[], maxTokens: number): TrainingEx
 
   while (!exhausted) {
     exhausted = true;
-    for (const side of SIDES) {
-      const queue = queues.get(side)!;
+    for (const word of order) {
+      const queue = queues.get(word)!;
       const next = queue.shift();
       if (!next) continue;
       exhausted = false;

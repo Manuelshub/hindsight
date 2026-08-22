@@ -40,6 +40,8 @@ interface Args {
   yes: boolean;
   watch: boolean;
   epochs: number;
+  /** Token budget for the dataset. Cost scales linearly with it. */
+  maxTokens?: number;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -55,6 +57,7 @@ function parseArgs(argv: string[]): Args {
     yes: argv.includes('--yes'),
     watch: argv.includes('--watch'),
     epochs: Number(get('--epochs') ?? DEFAULT_TRAINING_CONFIG.num_train_epochs),
+    maxTokens: get('--max-tokens') ? Number(get('--max-tokens')) : undefined,
   };
 }
 
@@ -67,7 +70,10 @@ async function prepare(args: Args): Promise<{ dir: string; tokens: number; cost:
   await mkdir(dir, { recursive: true });
 
   const traces = await readTraces(`${sourceDir}/traces.jsonl`);
-  const examples = buildCurriculum(traces);
+  const examples = buildCurriculum(
+    traces,
+    args.maxTokens === undefined ? {} : { maxTokens: args.maxTokens },
+  );
   const tokens = estimateTokens(examples);
   const cost = estimateCostOG(examples, args.epochs, 8e-7);
 

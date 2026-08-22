@@ -8,6 +8,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { WIRE } from '../src/prompt.js';
 import {
   DEFAULT_CURRICULUM,
   INSTRUCTION,
@@ -30,14 +31,27 @@ describe('buildCurriculum — learning signal', () => {
 
     assert.equal(examples.length, 3);
     for (const [i, example] of examples.entries()) {
-      assert.equal(example.output, traces[i]!.outcome.hindsight);
-      assert.notEqual(example.output, traces[i]!.decision.action);
+      // Labels are the hindsight answer, written in the wire vocabulary the model is
+      // served in. FLAT goes out as NONE.
+      assert.equal(example.output, WIRE[traces[i]!.outcome.hindsight]);
+      assert.notEqual(example.output, WIRE[traces[i]!.decision.action]);
     }
   });
 
   it('uses the shared instruction on every example', () => {
     const examples = buildCurriculum(makeMistakes(9), { balanceClasses: false });
     for (const example of examples) assert.equal(example.instruction, INSTRUCTION);
+  });
+
+  it('embeds the full served prompt as input, not just the snapshot', () => {
+    // Generation 1 trained on a bare snapshot and was served a system prompt plus an
+    // "Action:" suffix it had never seen. The trained sequence must contain the served one.
+    const examples = buildCurriculum(makeMistakes(3), { balanceClasses: false });
+    for (const example of examples) {
+      assert.match(example.input, /disciplined systematic trading agent/);
+      assert.match(example.input, /LONG, SHORT, or NONE/);
+      assert.match(example.input, /Action:$/);
+    }
   });
 
   it('includes the rendered snapshot as input', () => {
@@ -147,7 +161,7 @@ describe('I4 — determinism', () => {
     for (const line of lines) {
       const parsed = JSON.parse(line);
       assert.ok(['instruction', 'input', 'output'].every((k) => k in parsed));
-      assert.ok(['LONG', 'SHORT', 'FLAT'].includes(parsed.output));
+      assert.ok(['LONG', 'SHORT', 'NONE'].includes(parsed.output));
     }
   });
 });
